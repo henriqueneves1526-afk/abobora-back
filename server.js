@@ -1,8 +1,7 @@
-// server.js - Backend do Abobora Call
+// server.js - Backend do Abobora Call (COM WEBRTC)
 const express = require('express');
 const socketIO = require('socket.io');
 const http = require('http');
-const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -16,8 +15,17 @@ const io = socketIO(server, {
 // Fila de espera
 let waitingUsers = [];
 
-// Servir arquivos estáticos (para produção)
-app.use(express.static(path.join(__dirname, 'public')));
+// Rota principal
+app.get('/', (req, res) => {
+  res.json({ 
+    status: '✅ BACKEND ABOBORA CALL ONLINE',
+    message: 'Servidor das chamadas funcionando!',
+    endpoints: {
+      test: '/test',
+      users_online: waitingUsers.length
+    }
+  });
+});
 
 // Rota de teste
 app.get('/test', (req, res) => {
@@ -26,7 +34,7 @@ app.get('/test', (req, res) => {
 
 // Socket.IO
 io.on('connection', (socket) => {
-  console.log('🔗 Novo usuário:', socket.id);
+  console.log('🔗 Novo usuário conectado:', socket.id);
 
   // Entrar na fila
   socket.on('join-pool', (userData) => {
@@ -49,12 +57,36 @@ io.on('connection', (socket) => {
 
   // Desconectar
   socket.on('disconnect', () => {
-    console.log('❌ Desconectado:', socket.id);
+    console.log('❌ Usuário desconectado:', socket.id);
     waitingUsers = waitingUsers.filter(user => user.id !== socket.id);
     
     // Avisa parceiro se estiver em call
     if (socket.partnerId) {
       io.to(socket.partnerId).emit('partner-disconnected');
+    }
+  });
+  
+  // ========== WEBRTC SIGNALING ==========
+  // Retransmite oferta WebRTC
+  socket.on('webrtc-offer', (offer) => {
+    if (socket.partnerId) {
+      socket.to(socket.partnerId).emit('webrtc-offer', offer);
+      console.log(`📤 Retransmitindo oferta de ${socket.id} para ${socket.partnerId}`);
+    }
+  });
+  
+  // Retransmite resposta WebRTC
+  socket.on('webrtc-answer', (answer) => {
+    if (socket.partnerId) {
+      socket.to(socket.partnerId).emit('webrtc-answer', answer);
+      console.log(`📤 Retransmitindo resposta de ${socket.id} para ${socket.partnerId}`);
+    }
+  });
+  
+  // Retransmite candidatos ICE
+  socket.on('webrtc-ice-candidate', (candidate) => {
+    if (socket.partnerId) {
+      socket.to(socket.partnerId).emit('webrtc-ice-candidate', candidate);
     }
   });
 });
@@ -86,5 +118,6 @@ server.listen(PORT, () => {
   console.log(`🔗 Teste:https://abobora-call-true.onrender.com`);
 const serverUrl = 'https://abobora-back.onrender.com'; // ⬅️ COLE SUA URL AQUI
 });
+
 
 
